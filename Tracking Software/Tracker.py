@@ -16,6 +16,7 @@ me = (41.83419, -88.53227) #lat1 lon1
 
 
 
+
 class AircraftHanger:
     def __init__(self):
         self.data = None
@@ -45,6 +46,7 @@ def APIFunction(hanger, user=None, pw=None):
     except Exception as e:
         print(f"API not responding {e}")
         return None
+        
     print("API active")
     while(True):
         try:
@@ -59,7 +61,7 @@ def APIFunction(hanger, user=None, pw=None):
             return None
     
     
-def SerialFunction(hanger):
+def SerialFunction(hanger, geod):
     try:
         ardi = serial.Serial(port='COM3', baudrate=74880, timeout=.1)
     except serial.SerialException:
@@ -70,7 +72,7 @@ def SerialFunction(hanger):
         if resp[:5].decode("utf-8") == 'READY':
             break;
     print("COM Port open!")
-    geod = Geodesic.WGS84
+    
     while(True):
         if hanger.data:
             trackingCraft = ''
@@ -114,16 +116,17 @@ if __name__ == "__main__":
     config.read('config.ini')
     
     hanger = AircraftHanger()
+    geod = Geodesic.WGS84
+    
     try:
-        apiThread = threading.Thread(target=APIFunction, daemon=True, kwargs={'hanger':hanger,\
-                                                                            'user':config['OpenSkyAPI']['username'],\
-                                                                            'pw':config['OpenSkyAPI']['password']})
+        apiThread = threading.Thread(target=APIFunction, daemon=True,\
+        kwargs={'hanger':hanger, 'user':config['OpenSkyAPI']['username'],'pw':config['OpenSkyAPI']['password']})
     except KeyError:
         print("No credentials for API")
         apiThread = threading.Thread(target=APIFunction, daemon=True, kwargs={'hanger':hanger})
     apiThread.start()
     
-    serThread = threading.Thread(target=SerialFunction, daemon=True, args=(hanger, ))
+    serThread = threading.Thread(target=SerialFunction, daemon=True, args=(hanger, geod, ))
     serThread.start()
 
     while True:
