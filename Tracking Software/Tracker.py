@@ -7,9 +7,12 @@ from random import random
 import math
 import configparser
 
+
+#Angus, ON, CA
 #area = (44.04015, 44.59059, -80.26549, -79.45082) #lat1 lat2 lon1 long2
 #me = (44.32236, -79.86168) #lat1 lon1
 
+#Kaneville, IL, US
 area = (41.05668, 42.55962, -89.53224, -87.69588) #lat1 lat2 lon1 long2
 me = (41.83419, -88.53227) #lat1 lon1
 
