@@ -15,15 +15,13 @@
 #define MICROSTEPS 64 // Hardware microstepping by driver
 #define REV_STEPS MICROSTEPS*MOTOR_STEPS
 
-#define PAN_SERVO 10
-#define PAN_DIR 8
-#define PAN_STEP 11
-#define PAN_ENABLE 4
+#define PAN_DIR 4
+#define PAN_STEP 5
+#define PAN_ENABLE 6
 
-#define TILT_SERVO 10
 #define TILT_DIR 8
-#define TILT_STEP 11
-#define TILT_ENABLE 4
+#define TILT_STEP 9
+#define TILT_ENABLE 10
 
 #define SERIAL_BUFF 4
 unsigned char command[SERIAL_BUFF];
