@@ -9,17 +9,17 @@ import configparser
 
 
 #Angus, ON, CA
-#area = (44.04015, 44.59059, -80.26549, -79.45082) #lat1 lat2 lon1 long2
 #me = (44.32236, -79.86168) #lat1 lon1
 
 #Kaneville, IL, US
-area = (41.05668, 42.55962, -89.53224, -87.69588) #lat1 lat2 lon1 long2
 me = (41.83419, -88.53227) #lat1 lon1
 
+#Earth geodesic used for all calculations
+geod = Geodesic.WGS84
 
-
-
-
+#Hanger holds info of all the aircraft. Right now collects everything.
+#TODO: Make helper functions like counts, closest, in-view, etc
+#TODO: Filter out crafts with no callsigns, on ground, too old, etc
 class AircraftHanger:
     def __init__(self):
         self.data = None
@@ -38,9 +38,12 @@ class AircraftHanger:
         with self._lock:
             if self.data:
                 for craft in self.data:
-                    print(f"{craft.callsign}", end = "") 
+                    if craft.callsign:
+                        print(f"{craft.callsign}", end = "") 
                 print('')
 
+
+#Handles HTTP requests to server
 def APIFunction(hanger, user=None, pw=None):
     try:
         if user and pw:
@@ -52,12 +55,20 @@ def APIFunction(hanger, user=None, pw=None):
         return None
         
     print("API active")
+    
+    #Setup bounding box around "me" position
+    trackingDist = 15  #kms
+    g2 = geod.Direct(me[0],me[1],315,trackingDist*1000)
+    g1 = geod.Direct(me[0],me[1],135,trackingDist*1000)
+    area = (g1['lat2'], g2['lat2'], g2['lon2'], g1['lon2'])
+    print(area)
+    #Infinite loop checking for new data
     while(True):
         try:
             s = api.get_states(bbox = area)
             if s:
                 hanger.new_data(s.states)
-                print("New data")
+                print(f"New data with {len(s.states)} craft(s)")
             else:
                 time.sleep(0.1)
         except Exception as e:
@@ -65,6 +76,8 @@ def APIFunction(hanger, user=None, pw=None):
             return None
     
     
+#Finds closest craft and points to it 
+#TODO: make this JUST handle tracking commands held ... somewhere.
 def SerialFunction(hanger):
     try:
         ardi = serial.Serial(port='COM3', baudrate=74880, timeout=.1)
@@ -80,6 +93,7 @@ def SerialFunction(hanger):
     time.sleep(5)
     geod = Geodesic.WGS84
     
+    #Infinite loop sending motor commands.
     while(True):
         if hanger.data:
             with hanger._lock:
@@ -98,7 +112,6 @@ def SerialFunction(hanger):
                     if craft.icao24 == trackingCraft:
                         #print("Tracking")
                         newLatLon = geod.Direct(craft.latitude, craft.longitude, craft.true_track, craft.velocity*(time.time()-craft.time_position))
-                        #print(newLatLon, end="    <------")
                         measure = geod.Inverse(me[0], me[1], newLatLon.get('lat2'), newLatLon.get('lon2'))
                         #Prioritze geo altitude over baro. Default to 45deg.
                         
@@ -123,12 +136,12 @@ def SerialFunction(hanger):
 def angle_to_hex(ang):
     return int((ang%360)/0.015)
 
+
 if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('config.ini')
     
     hanger = AircraftHanger()
-    geod = Geodesic.WGS84
     
     try:
         apiThread = threading.Thread(target=APIFunction, daemon=True,\
@@ -141,8 +154,9 @@ if __name__ == "__main__":
     serThread = threading.Thread(target=SerialFunction, daemon=True, args=(hanger, ))
     serThread.start()
 
+    print("Starting display routine")
     while True:
-        #hanger.print_data()    
+        hanger.print_data()    
         time.sleep(5)
         
     print('Bye!')

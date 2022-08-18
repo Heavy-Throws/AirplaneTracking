@@ -11,9 +11,10 @@ Since the data will be received every 5 or 10 seconds (depending on whether you'
 - [x] README
 - [ ] License 
 - [ ] Visualizations
+- [ ] Remove OpenSkyAPI dependancy (just use requests)
 - [ ] Configuration for all items needed
   - [x] API credentials
-  - [ ] Serial COM 
+  - [x] Serial COM 
   - [ ] GPS "me" position
   - [ ] Size of bounding box
 - [ ] Auto-generate bounding box based on "me" GPS point and radius
