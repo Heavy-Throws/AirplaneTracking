@@ -1,11 +1,46 @@
 from collections import deque
 from time import time
+from threading import Lock
+
+
+class Airspace(object):
+
+    def __init__(self):
+        self.crafts = []
+        self._lock = Lock()
+
+    def setBase(self, coords):
+        pass
+
+    def getNearest(self):
+        pass
+
+    def updateSpace(self, vectors):
+        with self._lock:
+            for vect in vectors:
+                flag_new = True
+                for craft in self.crafts:
+                    if vect[0] == craft.ICAO:
+                        craft.updateStates(vect)
+                        flag_new = False
+                        break
+                if flag_new:
+                    self.crafts.append(Aircraft(vect))
+
+    def getHeading(self, vector):
+        pass
+
+    def printSpace(self):
+        print("Space")
+
+    def countInFlight(self):
+        pass
+
 
 class Aircraft(object):
     position_history = 5
     
     def __init__(self, vector):
-        print("Aircraft init")
         #Deque to hold time, lat, lon, alt, speed, track, vert_rate
         self._positions = deque(maxlen=self.position_history)
         self.updateStates(vector)
@@ -18,9 +53,12 @@ class Aircraft(object):
         #speed is groundspeed so must account for altitude
         return self._positions[-1][1:3]
 
+    def lastGPSCoords(self):
+        return self._positions
+
     def updateStates(self, vector):
         self.ICAO = vector[0]
-        self.callsign = vector[1] if vector[1] else " NOSIGN "
+        self.callsign = vector[1] if vector[1]!="" else " NOSIGN "
         self.country = vector[2] if vector[2] else " NOCOUNTRY "
         self.in_flight = True if vector[8]==0 else False
         self._positions.append((vector[3],vector[6], vector[5], 

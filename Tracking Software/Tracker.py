@@ -1,12 +1,12 @@
-from opensky_api import OpenSkyApi
 from geographiclib.geodesic import Geodesic
 import serial
 import threading
 import time
-from random import random
 import math
 import configparser
 import logging
+import OpenSkyTracking
+import Aircraft
 
 logger_main = logging.getLogger("MAIN")
 logging.basicConfig(format='[%(levelname)s]\t%(message)s', level=logging.INFO)
@@ -15,48 +15,27 @@ logging.basicConfig(format='[%(levelname)s]\t%(message)s', level=logging.INFO)
 #me = (44.32236, -79.86168) #lat1 lon1
 
 #Kaneville, IL, US
-me = (41.83419, -88.53227) #lat1 lon1
+#me = (41.83419, -88.53227) #lat1 lon1
+
+#Vaughan, ON, CA
+me = (43.78144, -79.54569)
 
 #Earth geodesic used for all calculations
 geod = Geodesic.WGS84
 
+#Handles all airspace related queries
+airspace = Aircraft.Airspace()
+
 #Hanger holds info of all the aircraft. Right now collects everything.
 #TODO: Make helper functions like counts, closest, in-view, etc
 #TODO: Filter out crafts with no callsigns, on ground, too old, etc
-class AircraftHanger:
-    def __init__(self):
-        self.data = None
-        self.closest = None
-        self._lock = threading.Lock()
-    
-    def new_data(self, newData):
-        with self._lock:
-            self.data = newData
-        
-    def estimate_pos(self, ID):
-        with self._lock:
-            return None
-        
-    def print_data(self):
-        with self._lock:
-            if self.data:
-                for craft in self.data:
-                    if craft.callsign:
-                        print(f"{craft.callsign}", end = "")
-                print('')
+#TODO: Conver hanger variable into Airspace namespace.
 
 
 #Handles HTTP requests to server
-def APIFunction(hanger, user=None, pw=None):
-    try:
-        if user and pw:
-            api = OpenSkyApi(username = user, password=pw)
-        else:
-            api = OpenSkyApi()
-    except Exception as e:
-        logger_main.critical(f"API not responding {e}")
-        return None
-        
+def APIFunction(airspace, user=None, pw=None):
+
+    api = OpenSkyTracking.APIController()     
     print("API active")
     
     #Setup bounding box around "me" position
@@ -64,14 +43,15 @@ def APIFunction(hanger, user=None, pw=None):
     g2 = geod.Direct(me[0],me[1],315,trackingDist*1000)
     g1 = geod.Direct(me[0],me[1],135,trackingDist*1000)
     area = (g1['lat2'], g2['lat2'], g2['lon2'], g1['lon2'])
-    logger_main.info(area)
+
+    api.set_bbox(area[0], area[1], area[2], area[3])
     #Infinite loop checking for new data
     while(True):
         try:
-            s = api.get_states(bbox = area)
+            s = api.get_update()
             if s:
-                hanger.new_data(s.states)
-                logger_main.info(f"New data with {len(s.states)} craft(s)")
+                airspace.updateSpace(s)
+                logger_main.info(f"New data with {len(s)} craft(s)")
             else:
                 time.sleep(0.1)
         except Exception as e:
@@ -81,7 +61,7 @@ def APIFunction(hanger, user=None, pw=None):
     
 #Finds closest craft and points to it 
 #TODO: make this JUST handle tracking commands held ... somewhere.
-def SerialFunction(hanger):
+def SerialFunction(airspace):
     try:
         ardi = serial.Serial(port='COM3', baudrate=74880, timeout=.1)
     except serial.SerialException:
@@ -98,11 +78,11 @@ def SerialFunction(hanger):
     
     #Infinite loop sending motor commands.
     while(True):
-        if hanger.data:
-            with hanger._lock:
+        if airspace.data:
+            with airspace._lock:
                 trackingCraft = ''
                 closestdist = 999999
-                for craft in hanger.data:
+                for craft in airspace.crafts:
                     if (time.time()//1-craft.time_position < 20 and craft.on_ground == False):
                         measure = geod.Inverse(me[0], me[1], craft.latitude, craft.longitude)
                         logger_main.debug(f"{craft.callsign} {measure.get('s12')}")
@@ -111,7 +91,7 @@ def SerialFunction(hanger):
                             closestdist = measure.get('s12')
                 elevation = 45
                 logger_main.debug(trackingCraft)
-                for craft in hanger.data:
+                for craft in airspace.crafts:
                     if craft.icao24 == trackingCraft:
                         logger_main.info("Tracking")
                         newLatLon = geod.Direct(craft.latitude, craft.longitude, craft.true_track, craft.velocity*(time.time()-craft.time_position))
@@ -144,23 +124,23 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('config.ini')
     
-    hanger = AircraftHanger()
-    
     try:
         apiThread = threading.Thread(target=APIFunction, daemon=True,\
-        kwargs={'hanger':hanger, 'user':config['OpenSkyAPI']['username'],'pw':config['OpenSkyAPI']['password']})
+        kwargs={'airspace':airspace, 'user':config['OpenSkyAPI']['username'],'pw':config['OpenSkyAPI']['password']})
     except KeyError:
         logger_main.info("No credentials for API")
-        apiThread = threading.Thread(target=APIFunction, daemon=True, kwargs={'hanger':hanger})
+        apiThread = threading.Thread(target=APIFunction, daemon=True, kwargs={'airspace':airspace})
     apiThread.start()
     
-    serThread = threading.Thread(target=SerialFunction, daemon=True, args=(hanger, ))
+    serThread = threading.Thread(target=SerialFunction, daemon=True, args=(airspace, ))
     serThread.start()
 
     print("Starting display routine")
     while True:
-        hanger.print_data()    
         time.sleep(5)
+        with airspace._lock:
+            for craft in airspace.crafts:
+                print(craft)
         
     print('Bye!')
     ardi.close()
