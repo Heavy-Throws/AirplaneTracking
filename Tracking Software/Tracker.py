@@ -1,13 +1,13 @@
-from opensky_api import OpenSkyApi
 from geographiclib.geodesic import Geodesic
 from collections import deque
 import serial
 import threading
 import time
-from random import random
 import math
 import configparser
 import logging
+import OpenSkyTracking
+import Aircraft
 
 logger_main = logging.getLogger("MAIN")
 logging.basicConfig(format='[%(levelname)s]\t%(message)s', level=logging.INFO)
@@ -27,7 +27,6 @@ me = (43.56826, -79.96056)
 
 #Earth geodesic used for all calculations
 geod = Geodesic.WGS84
-
 
 class Aircraft(object):
     position_history = 5
@@ -187,7 +186,7 @@ def APIFunction(airspace, user=None, pw=None):
     #Infinite loop checking for new data
     while(True):
         try:
-            s = api.get_states(bbox = area)
+            s = api.get_update()
             if s:
                 airspace.updateStates(s.states)
                 logger_main.info(f"New data with {len(s.states)} craft(s)")
@@ -235,8 +234,7 @@ def SerialFunction(airspace):
     #                     logger_main.info("Tracking")
     #                     newLatLon = geod.Direct(craft.latitude, craft.longitude, craft.true_track, craft.velocity*(time.time()-craft.time_position))
     #                     measure = geod.Inverse(me[0], me[1], newLatLon.get('lat2'), newLatLon.get('lon2'))
-    #                     #Prioritze geo altitude over baro. Default to 45deg.
-                        
+    #                     #Prioritze geo altitude over baro. Default to 45deg.     
     #                     alt = 45
     #                     if craft.geo_altitude:
     #                         elevation = math.degrees(math.atan(craft.geo_altitude/measure.get('s12')))           
@@ -260,6 +258,7 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('config.ini')
     
+
     airspace = Airspace()
     logger_main.debug("YOU ARE IN DEBUG LOGGER MODE")
     try:
