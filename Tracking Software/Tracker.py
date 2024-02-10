@@ -6,7 +6,7 @@ import time
 import math
 import configparser
 import logging
-import OpenSkyTracking
+from opensky_api import OpenSkyApi
 import Aircraft
 
 logger_main = logging.getLogger("MAIN")
@@ -32,64 +32,66 @@ class Aircraft(object):
     position_history = 5
     
     def __init__(self, state_info):
-        self._states = dict()
+        self._statehist = deque(maxlen=self.position_history)
+        self._states = dict() #eventually get rid of this
         self._stale = False
         self._valid = True
         self._est_pos = (None, None, None)
         self.updateStates(state_info)
         
     def __str__(self):
-        return self._states.callsign
+        return self._statehist[-1].callsign
         
     def currentGPSCoords(self):
         #Do ground calculations then add altitude
         if self.is_stale():
             return None
-        if self._states.true_track is None:
+        if self._statehist[-1].true_track is None:
             return None
-        if self._states.baro_altitude is None:
+        if self._statehist[-1].baro_altitude is None:
             return None
-        if self._states.velocity is None:
-            return (self._states.latitude, self._states.longitude, self._states.baro_altitude)
-        alt = self._states.baro_altitude
-        time_diff = time.time() - self._states.time_position
-        ground_location = geod.Direct(self._states.latitude, self._states.longitude,self._states.true_track, self._states.velocity*time_diff)
-        if self._states.vertical_rate is not None:
-            alt = alt + self._states.vertical_rate * time_diff
+        if self._statehist[-1].velocity is None:
+            return (self._statehist[-1].latitude, self._statehist[-1].longitude, self._statehist[-1].baro_altitude)
+        alt = self._statehist[-1].baro_altitude
+        time_diff = time.time() - self._statehist[-1].time_position
+        ground_location = geod.Direct(self._statehist[-1].latitude, self._statehist[-1].longitude,self._statehist[-1].true_track, self._statehist[-1].velocity*time_diff)
+        if self._statehist[-1].vertical_rate is not None:
+            alt = alt + self._statehist[-1].vertical_rate * time_diff
         self._est_pos = (ground_location['lat2'],ground_location['lon2'], alt)
         return self._est_pos
 
     def updateStates(self, state_info):
+        self._statehist.append(state_info)
         self._states = state_info
-        if self._states.callsign is None or self._states.callsign == "        ":
-            self._states.callsign = "--------"
+        if self._statehist[-1].callsign is None or self._statehist[-1].callsign == "        ":
+            self._statehist[-1].callsign = "--------"
 
     def icao(self):
-        return self._states.icao24
+        return self._statehist[-1].icao24
 
     def is_usable(self): 
         if not self.is_stale():
             if self.is_valid():
-                if self._states.baro_altitude is not None:
-                    if self._states.true_track is not None:
+                if self._statehist[-1].baro_altitude is not None:
+                    if self._statehist[-1].true_track is not None:
                         return True
         return False
 
 
     def is_stale(self, max_time = 30):
-        if (self._states.time_position is None) or (time.time() - self._states.time_position > max_time):
+        if (self._statehist[-1].time_position is None) or (time.time() - self._statehist[-1].time_position > max_time):
             self._stale = True
         else:
             self._stale = False
         return self._stale
     
     def is_valid(self, alt_lo=0, alt_hi=55000, filterOnGround = False):
-        if (self._states.baro_altitude is not None) and (self._states.on_ground is not None):
-            if self._states.baro_altitude < alt_lo:
+        if (self._statehist[-1].baro_altitude is not None) and (self._statehist[-1].on_ground is not None):
+            if self._statehist[-1].baro_altitude < alt_lo:
                 self._valid = False
-            elif self._states.baro_altitude > alt_hi:
+            elif self._statehist[-1].baro_altitude > alt_hi:
                 self._valid = False
-            elif filterOnGround and self._states.on_ground:
+            elif filterOnGround and self._statehist[-1].on_ground:
                 self._valid = False
             else:
                 self._valid = True
@@ -186,7 +188,7 @@ def APIFunction(airspace, user=None, pw=None):
     #Infinite loop checking for new data
     while(True):
         try:
-            s = api.get_update()
+            s = api.get_states(bbox=area)
             if s:
                 airspace.updateStates(s.states)
                 logger_main.info(f"New data with {len(s.states)} craft(s)")
@@ -263,7 +265,7 @@ if __name__ == "__main__":
     logger_main.debug("YOU ARE IN DEBUG LOGGER MODE")
     try:
         apiThread = threading.Thread(target=APIFunction, daemon=True,\
-        kwargs={'airspace':airspace, 'user':config['OpenSkyAPI']['username'],'pw':config['OpenSkyAPI']['password']})
+        kwargs={'airspace':airspace, 'user':config['OpenSkyAPI']['username'],'pw':config['OpenSkyAPI']['password']})                            
     except KeyError:
         logger_main.info("No credentials for API")
         apiThread = threading.Thread(target=APIFunction, daemon=True, kwargs={'airspace':airspace})
