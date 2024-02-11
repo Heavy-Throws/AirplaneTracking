@@ -7,7 +7,6 @@ import math
 import configparser
 import logging
 from opensky_api import OpenSkyApi
-import Aircraft
 
 logger_main = logging.getLogger("MAIN")
 logging.basicConfig(format='[%(levelname)s]\t%(message)s', level=logging.INFO)
@@ -102,10 +101,13 @@ class Aircraft(object):
 
 #New version, make it better!
 class Airspace(object):
-    def __init__(self, vectors = None ):
+    def __init__(self, vectors = None, radius = 75, center = me):
         self._lock = threading.Lock()
         self._craftData = {}
-        self._me = me
+        self._trackingDist = radius
+        self._bbox = None
+        self.updateMe(center)
+        self.set_bbox()
         if vectors:
             for craft in vectors:
                 self._craftData[craft.icao24] = Aircraft(craft)
@@ -120,8 +122,27 @@ class Airspace(object):
                         data = craft.currentGPSCoords()
                         print(f"{craft}\t{data[0]:.5f}\t{data[1]:.5f}\t{data[2]:.0f}\t{self.getDistance(craft.icao()):.0f}")
 
+    def get_trackingDist(self):
+        return self._trackingDist
+    
+    def set_trackingDist(self, val):
+        if val < 1 or val > 250:
+            raise ValueError("Tracking radius must be between 1 and 250")
+        else:
+            self._trackingDist = val
+        self.set_bbox()
+
     def updateMe(self, loc):
         self._me = loc
+        self.set_bbox()
+
+    def set_bbox(self):
+        g2 = geod.Direct(self._me[0],self._me[1],315,self._trackingDist*1000)
+        g1 = geod.Direct(self._me[0],self._me[1],135,self._trackingDist*1000)
+        self._bbox = (g1['lat2'], g2['lat2'], g2['lon2'], g1['lon2'])
+
+    def get_bbox(self):
+        return self._bbox
 
     def updateStates(self, vectors):
         with self._lock:
@@ -171,6 +192,7 @@ def APIFunction(airspace, user=None, pw=None):
     try:
         if user and pw:
             api = OpenSkyApi(username = user, password=pw)
+            logger_main.debug(f"Logged in as {user}")
         else:
             api = OpenSkyApi()
     except Exception as e:
@@ -180,18 +202,14 @@ def APIFunction(airspace, user=None, pw=None):
     logger_main.info("API active")
     
     #Setup bounding box around "me" position
-    trackingDist = 75  #kms
-    g2 = geod.Direct(me[0],me[1],315,trackingDist*1000)
-    g1 = geod.Direct(me[0],me[1],135,trackingDist*1000)
-    area = (g1['lat2'], g2['lat2'], g2['lon2'], g1['lon2'])
-    logger_main.debug(area)
+    logger_main.debug(airspace.get_bbox())
     #Infinite loop checking for new data
     while(True):
         try:
-            s = api.get_states(bbox=area)
+            s = api.get_states(bbox=airspace.get_bbox())
             if s:
                 airspace.updateStates(s.states)
-                logger_main.info(f"New data with {len(s.states)} craft(s)")
+                logger_main.debug(f"New data with {len(s.states)} craft(s)")
             else:
                 time.sleep(0.1)
         except Exception as e:
@@ -278,11 +296,9 @@ if __name__ == "__main__":
     while True:
         time.sleep(5)
         numCraft = airspace.getCount()
-        print(f"{numCraft} valid units being tracked.")  
         if numCraft > 0:
             a = airspace.getClosest(500)
-            logger_main.info(f"{a} is closest")
+            logger_main.info(f"{numCraft} valid units being tracked and {a} is closest")
         
-    logger_main.debug('Bye!')
     ardi.close()
 
