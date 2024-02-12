@@ -9,7 +9,7 @@ from geographiclib.geodesic import Geodesic
 geod = Geodesic.WGS84
 logger_space = logging.getLogger("RADAR")
 
-
+#Generic container used for state estimations and historical data. 
 class Aircraft(object):
     position_history = 5
     
@@ -84,16 +84,17 @@ class Aircraft(object):
 
 
 
-#New version, make it better!
+#Holds record of all crafts. 
+#Calculates distance, az/al
+#Defaults to CYYZ tower with 75km range. 
 class Airspace(object):
-    def __init__(self, vectors = None, radius = 75, center = None):
+    def __init__(self, vectors = None, center = (43.67509, -79.62930), radius = 75):
         self._lock = threading.Lock()
         self._live = True
         self._craftData = {}
         self._trackingDist = radius
         self._bbox = None
-        self.updateMe(center)
-        self.set_bbox()
+        self.updateFocus(center)
         if vectors:
             for craft in vectors:
                 self._craftData[craft.icao24] = Aircraft(craft)
@@ -113,14 +114,17 @@ class Airspace(object):
     
     def set_trackingDist(self, val):
         if val < 1 or val > 250:
-            raise ValueError("Tracking radius must be between 1 and 250")
+            raise ValueError("Tracking radius must be between 1km and 250km")
         else:
             self._trackingDist = val
-        self.set_bbox()
+            self.set_bbox()
 
-    def updateMe(self, loc):
+    def get_focus(self):
+        return self._focus
+
+    def updateFocus(self, loc):
         if loc is not None:
-            self._me = loc
+            self._focus = loc
             self.set_bbox()
             self._live = True
         else:
@@ -128,8 +132,8 @@ class Airspace(object):
 
     def set_bbox(self):
         if self._live:
-            g2 = geod.Direct(self._me[0],self._me[1],315,self._trackingDist*1000)
-            g1 = geod.Direct(self._me[0],self._me[1],135,self._trackingDist*1000)
+            g2 = geod.Direct(self._focus[0],self._focus[1],315,self._trackingDist*1000)
+            g1 = geod.Direct(self._focus[0],self._focus[1],135,self._trackingDist*1000)
             self._bbox = (g1['lat2'], g2['lat2'], g2['lon2'], g1['lon2'])
 
     def get_bbox(self):
@@ -146,7 +150,7 @@ class Airspace(object):
     def getDistance(self, craft): #Must be icao 
         if self._live:
             lat1, lon1, alt1 = craft.currentGPSCoords()
-            lat2, lon2, alt2 = self._me[0], self._me[1], 0
+            lat2, lon2, alt2 = self._focus[0], self._focus[1], 0
             g1 = geod.Inverse(lat1, lon1, lat2, lon2)
             dist = math.sqrt(g1['s12']**2 + alt1**2)
             return dist
@@ -176,3 +180,7 @@ class Airspace(object):
             return target
         else:
             return None
+    
+    def getVectors(self, craft):
+        pass
+    
