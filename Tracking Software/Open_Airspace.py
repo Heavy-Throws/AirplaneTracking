@@ -7,7 +7,7 @@ from geographiclib.geodesic import Geodesic
 
 #Earth geodesic used for all calculations
 geod = Geodesic.WGS84
-logger_space = logging.getLogger("RADAR")
+logger_space = logging.getLogger("Tracker.space")
 
 #Generic container used for state estimations and historical data. 
 class Aircraft(object):
@@ -15,7 +15,6 @@ class Aircraft(object):
     
     def __init__(self, state_info):
         self._statehist = deque(maxlen=self.position_history)
-        self._states = dict() #eventually get rid of this
         self._stale = False
         self._valid = True
         self._est_pos = (None, None, None)
@@ -42,9 +41,9 @@ class Aircraft(object):
         self._est_pos = (ground_location['lat2'],ground_location['lon2'], alt)
         return self._est_pos
 
+
     def updateStates(self, state_info):
         self._statehist.append(state_info)
-        self._states = state_info
         if self._statehist[-1].callsign is None or self._statehist[-1].callsign == "        ":
             self._statehist[-1].callsign = "--------"
 
@@ -107,7 +106,7 @@ class Airspace(object):
                 if craft.is_valid():
                     if not craft.is_stale():
                         data = craft.currentGPSCoords()
-                        print(f"{craft}\t{data[0]:.5f}\t{data[1]:.5f}\t{data[2]:.0f}\t{self.getDistance(craft.icao()):.0f}")
+                        print(f"{craft}\t{data[0]:.5f}\t{data[1]:.5f}\t{data[2]:.0f}\t{self.getDistance(craft):.0f}")
 
     def get_trackingDist(self):
         return self._trackingDist

@@ -16,6 +16,6 @@ Since the data will be received every 5 or 10 seconds (depending on whether you'
   - [x] API credentials
   - [x] Serial COM 
   - [ ] GPS "me" position
-  - [ ] Size of bounding box
-- [ ] Auto-generate bounding box based on "me" GPS point and radius
+  - [x] Size of bounding box
+- [x] Auto-generate bounding box based on "me" GPS point and radius
 - [ ] 
