@@ -1,1 +1,4 @@
-FlightTracker.log
+*.log
+*.json
+*.bak
+*.pyc
