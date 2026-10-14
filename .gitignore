@@ -1,0 +1,5 @@
+*.log
+*.json
+*.bak
+*.pyc
+test_*.py
