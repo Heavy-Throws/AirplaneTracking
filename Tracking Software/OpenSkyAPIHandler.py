@@ -117,6 +117,8 @@ class Flight_API(object):
                 s = api.get_states(bbox=self._bbox)
                 if s:
                     logger_api.debug(f"New data with {len(s.states)} craft(s)")
+                    for item in s.states: 
+                        item.callsign = str(item.callsign).strip()
                     data_queue.put(s.states)
                     self._call_count += 1
                 else:

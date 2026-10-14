@@ -1,4 +1,4 @@
-from utils import TrackerGUI
+from TK import TrackerGUI
 import OpenSkyAPIHandler
 import tkinter as tk
 
