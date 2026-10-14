@@ -2,3 +2,4 @@
 *.json
 *.bak
 *.pyc
+test_*.py

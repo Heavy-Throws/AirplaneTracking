@@ -2,8 +2,10 @@ import math
 import time
 import threading
 import logging
+import numpy as np
 from collections import deque
 from geographiclib.geodesic import Geodesic
+from TrackingSupport import Kalman_Estimator
 
 #Earth geodesic used for all calculations
 geod = Geodesic.WGS84
@@ -11,67 +13,77 @@ logger_space = logging.getLogger("Tracker.space")
 
 #Generic container used for state estimations and historical data. 
 class Aircraft(object):
-    position_history = 5
-    
+    position_history = 10
     def __init__(self, state_info):
         self._statehist = deque(maxlen=self.position_history)
         self._stale = False
         self._valid = True
+        self._estimator = Kalman_Estimator.TimeAdaptiveADSBLateralKF()
         self._est_pos = (None, None, None)
         self.updateStates(state_info)
         
     def __str__(self):
-        return self._statehist[-1].callsign
+        return self._statehist[-1]["callsign"]
         
     def currentGPSCoords(self):
         #Do ground calculations then add altitude
-        if self.is_stale():
+        if not self.is_usable():
             return None
-        if self._statehist[-1].true_track is None:
-            return None
-        if self._statehist[-1].baro_altitude is None:
-            return None
-        if self._statehist[-1].velocity is None:
-            return (self._statehist[-1].latitude, self._statehist[-1].longitude, self._statehist[-1].baro_altitude)
-        alt = self._statehist[-1].baro_altitude
-        time_diff = time.time() - self._statehist[-1].time_position
-        ground_location = geod.Direct(self._statehist[-1].latitude, self._statehist[-1].longitude,self._statehist[-1].true_track, self._statehist[-1].velocity*time_diff)
-        if self._statehist[-1].vertical_rate is not None:
-            alt = alt + self._statehist[-1].vertical_rate * time_diff
+        
+        if self._statehist[-1]["velocity"] is None:
+            return (self._statehist[-1]["latitude"], self._statehist[-1]["longitude"], self._statehist[-1]["baro_altitude"])
+        if self._statehist[-1]["baro_altitude"] is not None:
+            alt = self._statehist[-1]["baro_altitude"]
+        else: 
+            alt = 0
+        time_diff = time.time() - self._statehist[-1]["time_position"]
+        ground_location = geod.Direct(self._statehist[-1]["latitude"], self._statehist[-1]["longitude"],self._statehist[-1]["true_track"], self._statehist[-1]["velocity"]*time_diff)
+        if self._statehist[-1]["vertical_rate"] is not None and self._statehist[-1]["baro_altitude"] is not None:
+            alt = alt + self._statehist[-1]["vertical_rate"] * time_diff
         self._est_pos = (ground_location['lat2'],ground_location['lon2'], alt)
+        
+        
+        ###Testing filter
+        x,p = self._estimator.predict_current()
+        print(f"Estimator: {x}")
+
+
         return self._est_pos
 
 
     def updateStates(self, state_info):
         self._statehist.append(state_info)
-        if self._statehist[-1].callsign is None or self._statehist[-1].callsign == "        ":
-            self._statehist[-1].callsign = "--------"
+        if self._statehist[-1]["callsign"] is None or self._statehist[-1]["callsign"] == "        ":
+            self._statehist[-1]["callsign"] = "--------"
+        if self._statehist[-1]["baro_altitude"] == "":
+            self._statehist[-1]["baro_altitude"] = None
+        self._estimator.process_measurement(state_info["latitude"], state_info["longitude"],state_info["time_position"])
 
     def icao(self):
-        return self._statehist[-1].icao24
+        return self._statehist[-1]["icao24"]
 
     def is_usable(self): 
         if not self.is_stale():
             if self.is_valid():
-                if self._statehist[-1].baro_altitude is not None:
-                    if self._statehist[-1].true_track is not None:
+                if self._statehist[-1]["baro_altitude"] is not None:
+                    if self._statehist[-1]["true_track"] is not None:
                         return True
         return False
 
     def is_stale(self, max_time = 30):
-        if (self._statehist[-1].time_position is None) or (time.time() - self._statehist[-1].time_position > max_time):
+        if (self._statehist[-1]["time_position"] is None) or (time.time() - self._statehist[-1]["time_position"] > max_time):
             self._stale = True
         else:
             self._stale = False
         return self._stale
     
     def is_valid(self, alt_lo=0, alt_hi=55000, filterOnGround = False):
-        if (self._statehist[-1].baro_altitude is not None) and (self._statehist[-1].on_ground is not None):
-            if self._statehist[-1].baro_altitude < alt_lo:
+        if (self._statehist[-1]["baro_altitude"] is not None) and (self._statehist[-1]["on_ground"] is not None):
+            if self._statehist[-1]["baro_altitude"] < alt_lo:
                 self._valid = False
-            elif self._statehist[-1].baro_altitude > alt_hi:
+            elif self._statehist[-1]["baro_altitude"] > alt_hi:
                 self._valid = False
-            elif filterOnGround and self._statehist[-1].on_ground:
+            elif filterOnGround and self._statehist[-1]["on_ground"]:
                 self._valid = False
             else:
                 self._valid = True

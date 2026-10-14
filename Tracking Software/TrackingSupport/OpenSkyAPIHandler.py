@@ -9,7 +9,7 @@ from queue import Queue
 from geographiclib.geodesic import Geodesic
 from opensky_api import OpenSkyApi, TokenManager
 
-logger_api = logging.getLogger("Tracker.api")
+logger_api = logging.getLogger("Tracker.api") 
 geod_api = Geodesic.WGS84
 
 class Flight_API(object):
