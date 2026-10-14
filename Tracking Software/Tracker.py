@@ -1,5 +1,5 @@
 from TK import TrackerGUI
-import OpenSkyAPIHandler
+from TrackingSupport import OpenSkyAPIHandler
 import tkinter as tk
 
 root = tk.Tk()

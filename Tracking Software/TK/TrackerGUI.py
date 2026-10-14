@@ -4,7 +4,7 @@ from tkinter import Menu
 from tkinter import ttk
 from tkinter import *
 from tkinter.ttk import *
-import OpenSkyAPIHandler
+import TrackingSupport.OpenSkyAPIHandler as OpenSkyAPIHandler
 
 logging.basicConfig(
     level=logging.INFO,
